@@ -107,14 +107,22 @@ type IGenerateApiConfigOptions = {
   enableParamsInPath?: boolean;
   removeParamsFromFileName?: boolean;
   dynamicMethodName?: boolean;
+  exportMode: 'directly' | 'default';
   paramsScopeInFile: '[]' | '{}' | '()';
   pathScope: 'repository' | 'global';
 };
 
+type IGenerateApiConfigOptionsEntry = Partial<
+  Pick<
+    IGenerateApiConfigOptions,
+    'pathScope' | 'paramsScopeInFile' | 'dynamicMethodName' | 'exportMode'
+  >
+>;
+
 const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
   swagger: CONFIG,
   outDir: string,
-  entryOptions: Partial<Pick<IGenerateApiConfigOptions, 'pathScope'>> = {}
+  entryOptions: IGenerateApiConfigOptionsEntry = {}
 ) => {
   const options: IGenerateApiConfigOptions = {
     enableParamsInPath: false,
@@ -122,6 +130,7 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
     paramsScopeInFile: '[]',
     dynamicMethodName: false,
     pathScope: 'repository',
+    exportMode: 'default',
     ...entryOptions,
   };
 
@@ -243,7 +252,9 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
         `import kmApi from 'km-api';`,
         `import { z } from 'zod';`,
         ``,
-        `export const ${methodName} = kmApi.makeApiConfig({`,
+        ...(options.exportMode == 'directly'
+          ? [`export const ${methodName} = kmApi.makeApiConfig({`]
+          : [`const ${methodName} = kmApi.makeApiConfig({`]),
         `  path: \`${pathString}\`,`,
         `  method: '${method}',`,
         `  auth: '${auth}',`,
@@ -257,6 +268,7 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
         `    data: ${response},`,
         `  },`,
         `});`,
+        ...(options.exportMode == 'default' ? [`export default { ${methodName} }`] : []),
       ].join('\n');
 
       const fileContentPretty = formatWithPrettier(fileContent, 'typescript');
@@ -304,10 +316,9 @@ const readSwaggerFile = <CONFIG extends { [key: string]: any }>(
 };
 
 type IMakeApiOptions = {
-  pathScope: 'repository' | 'global';
   saveInCache: boolean;
   loadFromMainPath: boolean;
-};
+} & IGenerateApiConfigOptionsEntry;
 
 const makeApiConfig = (
   readPath: string,
@@ -318,6 +329,9 @@ const makeApiConfig = (
     pathScope: 'repository',
     saveInCache: true,
     loadFromMainPath: false,
+    dynamicMethodName: false,
+    exportMode: 'default',
+    paramsScopeInFile: '[]',
     ...entryOptions,
   };
 
@@ -333,12 +347,22 @@ const makeApiConfig = (
 
     if (isExistCacheFile == 'file' && options.loadFromMainPath == false) {
       readSwaggerFile(cacheSwaggerPath, options.pathScope).then((swaggerObject) => {
-        generateApiConfigsByPath(swaggerObject.data, writePath);
+        generateApiConfigsByPath(swaggerObject.data, writePath, {
+          dynamicMethodName: options.dynamicMethodName,
+          exportMode: options.exportMode,
+          paramsScopeInFile: options.paramsScopeInFile,
+          pathScope: options.pathScope,
+        });
         rs({ message: `configs created in ${writePath} successfully` });
       });
     } else {
       readSwaggerFile(readPath, options.pathScope, cacheSwaggerPath).then((swaggerObject) => {
-        generateApiConfigsByPath(swaggerObject.data, writePath);
+        generateApiConfigsByPath(swaggerObject.data, writePath, {
+          dynamicMethodName: options.dynamicMethodName,
+          exportMode: options.exportMode,
+          paramsScopeInFile: options.paramsScopeInFile,
+          pathScope: options.pathScope,
+        });
         rs({ message: `configs created in ${writePath} successfully` });
       });
     }
