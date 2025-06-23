@@ -351,45 +351,22 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
 
   // Generate index.ts for each directory if relationMapWithIndexTs is enabled
   if (options.relationMapWithIndexTs) {
-    // Helper to recursively collect all directories
-    function getAllDirs(rootDir: string, collected: Set<string>) {
-      if (!collected.has(rootDir)) {
-        collected.add(rootDir);
-        const entries = jetpack.list(rootDir) || [];
-        for (const entry of entries) {
-          const entryPath = pathModule.join(rootDir, entry);
-          if (jetpack.exists(entryPath) === 'dir') {
-            getAllDirs(entryPath, collected);
-          }
-        }
-      }
-    }
-
-    // Collect all directories under writePath
-    const allDirs = new Set<string>();
-    getAllDirs(writePath, allDirs);
-
-    for (const dir of allDirs) {
-      // Find .ts files (excluding index.ts) and subdirectories
-      const entries = jetpack.list(dir) || [];
-      const tsFiles = entries
-        .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
-        .map((f) => f.replace(/\.ts$/, ''));
-      const subDirs = entries.filter((f) => jetpack.exists(pathModule.join(dir, f)) === 'dir');
-
-      // Prepare imports for files and subdirectories
-      const importLines = [
-        ...tsFiles.map((f) => `import ${_.camelCase(f)} from './${f}';`),
-        ...subDirs.map((d) => `import ${_.camelCase(d)} from './${d}';`),
-      ];
+    console.log('fffff');
+    // @ts-ignore
+    for (const [dir, files] of Object.entries(dirFilesMap)) {
+      // Sort files for stable output
+      const sortedFiles = [...files].sort();
+      const importLines = sortedFiles.map((f) => `import ${_.camelCase(f)} from './${f}';`);
       const exportLines = [
         '',
         'export default {',
-        [...tsFiles, ...subDirs].map((f) => `  ${_.camelCase(f)},`).join('\n'),
+        sortedFiles.map((f) => `  ${_.camelCase(f)},`).join('\n'),
         '};',
         '',
       ];
       const indexContent = [...importLines, ...exportLines].join('\n');
+      console.log('indexContent', indexContent);
+
       const indexContentPretty = formatWithPrettier(indexContent, 'typescript');
       jetpack.write(pathModule.join(dir, 'index.ts'), indexContentPretty);
     }

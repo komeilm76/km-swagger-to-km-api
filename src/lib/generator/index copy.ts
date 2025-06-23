@@ -1,5 +1,4 @@
 import jetpack from 'fs-jetpack';
-import _ from 'lodash';
 import pathModule from 'path';
 import prettier from 'prettier';
 
@@ -202,9 +201,6 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
 
   const schemas = swagger.components?.schemas || {};
 
-  // Track files per directory for index.ts generation
-  const dirFilesMap: Record<string, string[]> = {};
-
   for (const [apiPath, pathObj] of Object.entries(swagger.paths)) {
     // @ts-ignore
     for (const method of Object.keys(pathObj)) {
@@ -313,13 +309,6 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
 
       const filePath = pathModule.join(dir, fileName);
 
-      // Track file for index.ts
-      if (options.relationMapWithIndexTs) {
-        if (!dirFilesMap[dir]) dirFilesMap[dir] = [];
-        // Remove .ts extension for import
-        dirFilesMap[dir].push(fileName.replace(/\.ts$/, ''));
-      }
-
       const fileContent = [
         `import kmApi from 'km-api';`,
         `import { z } from 'zod';`,
@@ -348,52 +337,6 @@ const generateApiConfigsByPath = <CONFIG extends { [key: string]: any }>(
       jetpack.write(filePath, fileContentPretty);
     }
   }
-
-  // Generate index.ts for each directory if relationMapWithIndexTs is enabled
-  if (options.relationMapWithIndexTs) {
-    // Helper to recursively collect all directories
-    function getAllDirs(rootDir: string, collected: Set<string>) {
-      if (!collected.has(rootDir)) {
-        collected.add(rootDir);
-        const entries = jetpack.list(rootDir) || [];
-        for (const entry of entries) {
-          const entryPath = pathModule.join(rootDir, entry);
-          if (jetpack.exists(entryPath) === 'dir') {
-            getAllDirs(entryPath, collected);
-          }
-        }
-      }
-    }
-
-    // Collect all directories under writePath
-    const allDirs = new Set<string>();
-    getAllDirs(writePath, allDirs);
-
-    for (const dir of allDirs) {
-      // Find .ts files (excluding index.ts) and subdirectories
-      const entries = jetpack.list(dir) || [];
-      const tsFiles = entries
-        .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
-        .map((f) => f.replace(/\.ts$/, ''));
-      const subDirs = entries.filter((f) => jetpack.exists(pathModule.join(dir, f)) === 'dir');
-
-      // Prepare imports for files and subdirectories
-      const importLines = [
-        ...tsFiles.map((f) => `import ${_.camelCase(f)} from './${f}';`),
-        ...subDirs.map((d) => `import ${_.camelCase(d)} from './${d}';`),
-      ];
-      const exportLines = [
-        '',
-        'export default {',
-        [...tsFiles, ...subDirs].map((f) => `  ${_.camelCase(f)},`).join('\n'),
-        '};',
-        '',
-      ];
-      const indexContent = [...importLines, ...exportLines].join('\n');
-      const indexContentPretty = formatWithPrettier(indexContent, 'typescript');
-      jetpack.write(pathModule.join(dir, 'index.ts'), indexContentPretty);
-    }
-  }
 };
 
 const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
@@ -412,6 +355,7 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
     ...entryOptions,
   };
   writePath = handlePathScope(writePath, options.pathScope);
+  console.log('here', 6, writePath);
 
   const schemas = swagger.components?.schemas || {};
   const apiObject: Record<string, any> = {};
@@ -429,29 +373,24 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
         .replace(/-/g, '')
         .replace(/([A-Z])/g, (m: string) => m)
         .replace(/[^a-zA-Z0-9_]/g, '');
-      const methodName = options.dynamicMethodName
-        ? tag.charAt(0).toUpperCase() +
-          tag.slice(1) +
-          opName
-            .split('_')
-            .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
-            .join('') +
-          method.charAt(0).toUpperCase() +
-          method.slice(1)
-        : 'config';
+      const methodName =
+        options.dynamicMethodName == true
+          ? tag.charAt(0).toUpperCase() +
+            tag.slice(1) +
+            opName
+              .split('_')
+              .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
+              .join('') +
+            method.charAt(0).toUpperCase() +
+            method.slice(1)
+          : 'config';
 
       const auth = apiPath.startsWith('/auth') || apiPath.startsWith('/common') ? 'NO' : 'YES';
       let { body, params, query } = getRequestZod(pathObj, method, schemas);
       const response = getResponseZod(pathObj, method, schemas);
 
-      // Optionally remove params from api config
-      if (options.removeParamsFromFileName) {
-        params = 'z.object({})';
-      }
-
-      // Path string
       let pathString = apiPath;
-      if (options.removeParamsFromFileName) {
+      if (options?.removeParamsFromFileName) {
         // @ts-ignore
         if (pathObj[method].parameters) {
           // @ts-ignore
@@ -467,7 +406,7 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
           pathObj,
           method,
           schemas,
-          options.enableParamsInPath
+          options?.enableParamsInPath
         );
       }
 
@@ -476,7 +415,7 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
       const segments = cleanPath
         .split('/')
         .filter(Boolean)
-        .map((s) => (options.enableParamsInPath ? s : s.replace(/[{}]/g, '')));
+        .map((s) => (options?.enableParamsInPath ? s : s.replace(/[{}]/g, '')));
 
       let current = apiObject;
       for (let i = 0; i < segments.length; i++) {
@@ -506,7 +445,7 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
     if (typeof obj !== 'object' || obj === null) return JSON.stringify(obj);
     if (obj.methodName && obj.path) {
       // Render as kmApi.makeApiConfig
-      const lines = [
+      return [
         `kmApi.makeApiConfig({`,
         `  path: \`${obj.path}\`,`,
         `  method: '${obj.method}',`,
@@ -521,8 +460,7 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
         `    data: ${obj.response.data},`,
         `  },`,
         `})`,
-      ];
-      return lines.join('\n' + '  '.repeat(depth + 1));
+      ].join('\n' + '  '.repeat(depth + 1));
     }
     const entries = Object.entries(obj)
       .map(([k, v]) => `${JSON.stringify(k)}: ${renderApiObject(v, depth + 1)}`)
@@ -530,16 +468,13 @@ const generateApiConfigsAsObject = <CONFIG extends { [key: string]: any }>(
     return `{\n${'  '.repeat(depth + 1)}${entries}\n${'  '.repeat(depth)}}`;
   }
 
-  const exportLine =
-    options.exportMode === 'default' ? `export default apiConfigs;` : `export { apiConfigs };`;
-
   const fileContent = [
     `import kmApi from 'km-api';`,
     `import { z } from 'zod';`,
     ``,
     `const apiConfigs = ${renderApiObject(apiObject)};`,
     ``,
-    exportLine,
+    `export default apiConfigs;`,
   ].join('\n');
 
   const fileContentPretty = formatWithPrettier(fileContent, 'typescript');
