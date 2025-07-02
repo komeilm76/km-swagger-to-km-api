@@ -23,7 +23,7 @@ function toZodType(schema: any, schemas: any): string {
       zodNum += 'z.number().int()';
     }
     if (schema.format === 'int64') {
-      zodNum += 'z.string().transform((v) => { /*v is int64*/ return v})';
+      zodNum += 'z.string().transform((v) => { /* v is int64 */ return v})';
     }
     if (schema.nullable) zodNum += '.nullable()';
     return zodNum;
