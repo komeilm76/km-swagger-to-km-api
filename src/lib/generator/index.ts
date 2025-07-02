@@ -14,30 +14,33 @@ function toZodType(schema: any, schemas: any): string {
     }
     return 'z.any()';
   }
-  switch (schema.type) {
-    case 'string':
-      if (schema.format === 'date' || schema.format === 'date-time') return 'z.string()';
-      return 'z.string()' + (schema.nullable ? '.nullable()' : '');
-    case 'integer':
-    case 'number':
-      let zodNum = 'z.number()';
-      if (schema.format === 'int32' || schema.format === 'int64') zodNum += '.int()';
-      if (schema.nullable) zodNum += '.nullable()';
-      return zodNum;
-    case 'boolean':
-      return 'z.boolean()' + (schema.nullable ? '.nullable()' : '');
-    case 'array':
-      return `z.array(${toZodType(schema.items, schemas)})${schema.nullable ? '.nullable()' : ''}`;
-    case 'object':
-      if (schema.properties) {
-        const props = Object.entries(schema.properties)
-          .map(([k, v]: [string, any]) => `${k}: ${toZodType(v, schemas)}`)
-          .join(',\n');
-        return `z.object({${props}})${schema.nullable ? '.nullable()' : ''}`;
-      }
-      return 'z.object({})';
-    default:
-      return 'z.any()';
+  if (schema.type === 'string') {
+    if (schema.format === 'date' || schema.format === 'date-time') return 'z.string()';
+    return 'z.string()' + (schema.nullable ? '.nullable()' : '');
+  } else if (schema.type === 'integer' || schema.type === 'number') {
+    let zodNum = '';
+    if (schema.format === 'int32') {
+      zodNum += 'z.number().int()';
+    }
+    if (schema.format === 'int64') {
+      zodNum += 'z.string().transform((v) => { /*v is int64*/ return v})';
+    }
+    if (schema.nullable) zodNum += '.nullable()';
+    return zodNum;
+  } else if (schema.type === 'boolean') {
+    return 'z.boolean()' + (schema.nullable ? '.nullable()' : '');
+  } else if (schema.type === 'array') {
+    return `z.array(${toZodType(schema.items, schemas)})${schema.nullable ? '.nullable()' : ''}`;
+  } else if (schema.type === 'object') {
+    if (schema.properties) {
+      const props = Object.entries(schema.properties)
+        .map(([k, v]: [string, any]) => `${k}: ${toZodType(v, schemas)}`)
+        .join(',\n');
+      return `z.object({${props}})${schema.nullable ? '.nullable()' : ''}`;
+    }
+    return 'z.object({})';
+  } else {
+    return 'z.any()';
   }
 }
 function getRequestZod(pathObj: any, method: string, schemas: any) {
