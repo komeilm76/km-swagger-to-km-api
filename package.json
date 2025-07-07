@@ -1,6 +1,6 @@
 {
   "name": "km-swagger-to-km-api",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "convert swagger json file to km-api config.",
   "main": "build/main/index.js",
   "typings": "build/main/index.d.ts",
