@@ -19,6 +19,9 @@ function toZodType(schema: any, schemas: any): string {
     return 'z.string()' + (schema.nullable ? '.nullable()' : '');
   } else if (schema.type === 'integer' || schema.type === 'number') {
     let zodNum = '';
+    if (schema.format === 'float') {
+      zodNum += 'z.number().transform((v)=> { /* v is float number */ return v })';
+    }
     if (schema.format === 'int32') {
       zodNum += 'z.number().int()';
     }
